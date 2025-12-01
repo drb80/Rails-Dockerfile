@@ -20,6 +20,7 @@ Build using ```docker build -t railstodo .``` for a dev environment, or
 ```docker build --build-arg RAILS_ENV=production -t railstodo .``` for a
 production environment.
 
-Run using ```docker run -it -p 3000:3000 -v ${PWD}/data:/data railstodo```
+Run using ```docker run -it -p 3000:3000 railstodo```
 
-Note that the SQLite database will be in the data directory after running.
+If you want the database to remain between runs, you'll need to export
+storage.

@@ -8,6 +8,7 @@ FROM ruby:$RUBY_VERSION-slim AS base
 # Pass in development, test, or production, development is default
 # E.g.: docker build --build-arg RAILS_ENV=production -t railstodo .
 ARG RAILS_ENV=development
+ENV RAILS_ENV=$RAILS_ENV
 
 # Rails app lives here
 WORKDIR /rails
@@ -32,10 +33,6 @@ RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y build-essential libyaml-dev pkg-config && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
-# Run and own only the runtime files as a non-root user for security
-RUN groupadd --system --gid 1000 rails
-RUN useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash
-
 # Install application gems
 COPY Gemfile Gemfile.lock ./
 RUN bundle install
@@ -49,10 +46,6 @@ COPY . .
 # Precompiling assets for production without requiring secret RAILS_MASTER_KEY
 RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
 
-# Switch to non-root now.
-RUN chown -R 1000:1000 .
-USER 1000:1000
-
 # Final stage for app image
 FROM base
 
@@ -61,8 +54,17 @@ COPY --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
 COPY --from=build /rails /rails
 
 # Entrypoint prepares the database.
-ENTRYPOINT ["/rails/bin/docker-entrypoint"]
+# ENTRYPOINT ["/rails/bin/docker-entrypoint"]
+
+RUN ./bin/rails db:prepare
+
+# Run and own only the runtime files as a non-root user for security
+RUN groupadd --system --gid 1000 rails
+RUN useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash
+RUN chown -R rails:rails .
+USER 1000:1000
 
 # Start the server by default, this can be overwritten at runtime
 EXPOSE 3000
+# CMD ["/bin/bash"]
 CMD ["./bin/rails", "server", "-b", "0.0.0.0"]
