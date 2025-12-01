@@ -42,7 +42,6 @@ RUN bundle install
 RUN rm -rf ~/.bundle/
 RUN rm -rf "${BUNDLE_PATH}"/ruby/*/cache
 RUN rm -rf "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git
-RUN mkdir /data
 
 # Copy application code
 COPY . .
@@ -61,13 +60,9 @@ FROM base
 COPY --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
 COPY --from=build /rails /rails
 
-# Deployment options
-ENV DATABASE_URL="sqlite3:///data/${RAILS_ENV}.sqlite3"
-
 # Entrypoint prepares the database.
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 
 # Start the server by default, this can be overwritten at runtime
 EXPOSE 3000
-VOLUME /data
 CMD ["./bin/rails", "server", "-b", "0.0.0.0"]
