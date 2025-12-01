@@ -1,0 +1,84 @@
+# syntax=docker/dockerfile:1
+# check=error=true
+
+# Make sure RUBY_VERSION matches the Ruby version in .ruby-version
+ARG RUBY_VERSION=3.3.1
+FROM ruby:$RUBY_VERSION-slim AS base
+
+# Pass in development, test, or production, development is default
+# E.g.: docker build --build-arg RAILS_ENV=production -t railstodo .
+ARG RAILS_ENV=development
+
+# Rails app lives here
+WORKDIR /rails
+
+# Update gems and bundler
+RUN gem update --system --no-document && \
+    gem install -N bundler
+
+# Install base packages
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y curl libjemalloc2 sqlite3 && \
+    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+
+ENV BUNDLE_DEPLOYMENT="1" \
+    BUNDLE_PATH="/usr/local/bundle"
+
+# Throw-away build stage to reduce size of final image
+FROM base AS build
+
+# Install packages needed to build gems
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y build-essential libyaml-dev pkg-config && \
+    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+
+# Run and own only the runtime files as a non-root user for security
+RUN groupadd --system --gid 1000 rails
+RUN useradd rails --uid 1000 --gid 1000 --create-home --shell /bin/bash
+
+# Install application gems
+COPY Gemfile Gemfile.lock ./
+RUN bundle install
+RUN rm -rf ~/.bundle/
+RUN rm -rf "${BUNDLE_PATH}"/ruby/*/cache
+RUN rm -rf "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git
+RUN mkdir /data
+
+# Copy application code
+COPY . .
+
+# Precompiling assets for production without requiring secret RAILS_MASTER_KEY
+RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
+
+# Switch to non-root now.
+RUN chown -R 1000:1000 .
+USER 1000:1000
+
+# Final stage for app image
+FROM base
+
+# Copy built artifacts: gems, application
+COPY --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
+COPY --from=build /rails /rails
+
+# Deployment options
+ENV DATABASE_URL="sqlite3:///data/${RAILS_ENV}.sqlite3"
+
+# Entrypoint prepares the database.
+ENTRYPOINT ["/rails/bin/docker-entrypoint"]
+
+# Start the server by default, this can be overwritten at runtime
+EXPOSE 3000
+VOLUME /data
+CMD ["./bin/rails", "server", "-b", "0.0.0.0"]
+
+<hr/>
+
+And put in a better ```docker-entrypoint```:
+#!/bin/bash -e
+
+# Enable jemalloc for reduced memory usage and latency.
+if [ -z "${LD_PRELOAD+x}" ]; then
+    LD_PRELOAD=$(find /usr/lib -name libjemalloc.so.2 -print -quit)
+    export LD_PRELOAD
+fi
