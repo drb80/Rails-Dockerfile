@@ -71,14 +71,3 @@ ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 EXPOSE 3000
 VOLUME /data
 CMD ["./bin/rails", "server", "-b", "0.0.0.0"]
-
-<hr/>
-
-And put in a better ```docker-entrypoint```:
-#!/bin/bash -e
-
-# Enable jemalloc for reduced memory usage and latency.
-if [ -z "${LD_PRELOAD+x}" ]; then
-    LD_PRELOAD=$(find /usr/lib -name libjemalloc.so.2 -print -quit)
-    export LD_PRELOAD
-fi
